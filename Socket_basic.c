@@ -165,3 +165,15 @@ int main(int argc, char *argv[])
     return 0;
 }
                                                            
+<OUTPUT>
+$ ./server_socket.exe
+receive: test message
+send msg length = 13
+
+$ ./client_socket.exe "test message"
+send data : test message[12]
+==============write finished============
+recv data : 13 : test message[18]
+==============read finished=============
+    
+    
