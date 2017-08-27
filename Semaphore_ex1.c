@@ -1,4 +1,5 @@
 <Semaphore Function>
+Reference site : https://www.joinc.co.kr/w/Site/system_programing/IPC/semaphores
 ===================================================================
 - 헤더파일
 #include <sys/types.h> 
