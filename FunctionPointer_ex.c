@@ -171,7 +171,63 @@ int main()
 
 * answer  30
 =============================================================================================================
+#include <stdio.h>
 
+int add(int a, int b)
+{
+    return a + b;
+}
+
+int sub(int a, int b)
+{
+    return a - b;
+}
+
+struct Calc {
+    ①_________________________
+};
+
+int executer(②_______________, int a, int b)
+{
+    return fp(a, b);
+}
+
+③          getFunc                                    
+{
+    return c->fp[index];
+}
+
+int main()
+{
+    struct Calc c = { { add, sub } };
+
+    printf("%d\n", executer(getFunc(&c, 0), 10, 20));
+    printf("%d\n", executer(getFunc(&c, 1), 10, 20));
+
+    return 0;
+}
+실행 결과
+30
+-10
+정답
+① int (*fp[2])(int, int);
+② int (*fp)(int, int)
+③ int (*getFunc(struct Calc *c, int index))(int, int)
+해설
+구조체 Calc의 변수를 선언하면서 초기화할 때 함수 add와 sub의 메모리 주소를 저장하고 있습니다. 
+따라서 Calc는 일단 함수 포인터를 멤버로 가지고 있습니다.
+
+먼저 executer(getFunc(&c, 0), 10, 20)에서 가장 안쪽에 있는 getFunc부터 살펴봅니다. 
+getFunc 함수 안에서는 c->fp[index]와 같이 구조체 포인터 c의 멤버 fp를 인덱스로 접근하여 요소를 반환하고 있습니다. 
+따라서 구조체 Calc의 멤버 fp는 함수 포인터 배열이며, int (*fp[2])(int, int);와 같이 만들어줍니다.
+
+이제 getFunc 함수의 헤더 부분을 만듭니다. 함수 안에서 구조체 포인터 c와 정수형 index를 사용하고 있고, 
+int형 반환값, int형 매개변수 두 개인 함수 포인터를 반환하고 있습니다. 
+따라서 함수 헤더는 int (*getFunc(struct Calc *c, int index))(int, int)와 같이 만들어줍니다.
+
+마지막으로 executer 함수 안을 보면 fp(a, b)와 같이 함수를 호출하고 있습니다. 
+따라서 int형 반환값, int형 매개변수 두 개인 함수 포인터를 받을 수 있도록 
+매개변수 부분을 int (*fp)(int, int)와 같이 지정해주면 됩니다.
 =============================================================================================================
 
 =============================================================================================================
