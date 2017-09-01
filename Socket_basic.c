@@ -176,4 +176,227 @@ send data : test message[12]
 recv data : 13 : test message[18]
 ==============read finished=============
     
+===================================================================================
+다양한 입출력 함수들
+
+13-1 send & recv 입출력 함수
+
+#include <sys/socket.h>
+
+ssize_t send(int sockfd, const void * buf, size_t nbytes, int flags);
+	-> 성공 시 전송된 바이트 수, 실패 시 -1 반환
+
+	- sockfd : 데이터 전송 대상과의 연결을 의미하는 소켓의 파일 디스크립터 전달.
+	- buf : 전송할 데이터를 저장하고 있는 버퍼의 주소 값 전달.
+	- nbytes : 전송할 바이트 수 전달.
+	- flags : 데이터 전송 시 적용할 다양한 옵션 정보 전달. 
+
+flags 값에는 아래와 같은 옵션이 들어갈 수 있다. 
+
+MSG_OBB : 긴급 데이터(Out-ofband data)의 전송을 위한 옵션. write()함수보다 우선순위가 높다. 
+
+MSG_DONTROUTE : 데이터 전송과정에서 라우팅(Routing) 테이블을 참조하지 않을 것을 요구하는 옵션,
+				따라서 로컬(Local) 네트워크상에서 목적지를 찾을 때 사용되는 옵션
+MSG_DONTWAIT : 입출력 함수 호출과저에서 블로킹이 되지 않을 것을 요구하기 위한 옵션. 
+
+
+#include <sys/socket.h>
+
+ssize_t recv(int sockfd, void *buf, size_t nbytes, int flags);
+	-> 성공 시 수신한 바이트 수(단 End Of File 전송 시 0), 실패 시 -1 반환
+
+	- sockfd : 데이터 수신 대상과의 연결을 의미하는 소켓의 파일 디스크립터 전달.
+	- buf : 수시한 데이터를 저장할 버퍼의 수고 값 전달.
+	- nbytes : 수신할 수 있는 최대 바이트 수 전달.
+	- flags : 데이터 수신 시 적용할 다양한 옵션 정보 전달. 
+
+flags 값에는 아래와 같은 옵션이 들어갈 수 있다. 
+
+MSG_OBB : 긴급 데이터(Out-ofband data)의 수신을 위한 옵션.
+MSG_PEEK : 입력버퍼에 수신된 데이터의 존재유무 확인을 위한 옵션. 
+MSG_DONTWAIT : 입출력 함수 호출과저에서 블로킹이 되지 않을 것을 요구하기 위한 옵션. 
+MSG_WAITALL : 요청한 바이트 수에 해당하는 데이터가 전부 수신될 때까지, 호출된 함수가 반환되는 것을 막기 위한 옵션. 
+
+긴급 데이터 수신 예제 코드
+ex)
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+
+#define BUF_SIZE 30
+void error_handling(char *message);
+void urg_handler(int signo);
+
+int acpt_sock; 
+int recv_sock;
+
+int main(int argc, char *argv[])
+{
+	struct sockaddr_in recv_adr, serv_adr;
+	int str_len, state;
+	socklen_t serv_adr_sz;
+	struct sigaction act;
+	char buf[BUF_SIZE];
+	if(argc != 2)
+	{
+		printf("Usage : %s <port> \n", argv[0]);
+		exit(1);
+	}
+
+	act.sa_handler = urg_handler; // MSG_OOB의 긴급 메시지를 수신하게 되면, 운영체제는 SIGURG 시그널을 발생시켜서
+								  // 프로세스가 등록한 시그널 핸들러가 호출되게 한다. 
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+
+	acpt_sock = socket(PF_INET. SOCK_STREAM, 0);
+	memeset(&recv_adr, 0, sizeof(recv_adr));
+	recv_adr.sin_family = AF_INET;
+	recv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
+	recv_adr.sin_port = htons(atoi(argv[1]));
+
+	if(bind(acpt_sock, (struct sockaddr*)&recv_adr, sizeof(recv_adr)) == -1)
+		error_handling("bind() error");
+	listen(acpt_sock, 5);
+
+	serv_adr_sz = sizeof(serv_adr);
+	recv_sock = accept(acpt_sock, (struct sockaddr*)&serv_adr, &serv_adr_sz);
+
+	fcntl(recv_sock, F_SETOWN, getpid());	// 밑에 설명 참조.
+	state = sigaction(SIGURG, &act, 0);
+
+	while((str_len = recv(recv_sock, buf, sizeof(buf), 0)) != 0)
+	{
+		if(str_len == -1)
+			continue;
+		buf[str_len] = 0;
+		puts(buf);
+	}
+	close(recv_sock);
+	close(acpt_sock);
+	return 0;
+}
+
+void urg_handler(int signo) 
+{
+	int str_len;
+	char buf[BUF_SIZE];
+	str_len = recv(recv_sock, buf, sizeof(buf) - 1, MSG_OOB); // 핸들어 함수 내부에 긴급 메시지 수신을 위한 recv()함수 
+	buf[str_len] = 0;
+	pritnf("Urgent message : %s \n", buf);
+}
+
+void error_handling(char *message)
+{
+	fputs(message, stderr);
+	fputc('\n', stderr);
+	exit(1);
+}
+
+fcntl 함수는 파일 디스크립터의 컨트롤에 상용이 된다. 
+fcntl(recv_sock, F_SETOWN, getpid());
+위에서 사용된 의미하는
+"파일 디스크립터 recv_sock이 가리키는 소켓의 소유자(F_SETWON)를 getpid함수가 반환하는 ID의 프로세스로 변경시키겠다."
+다른 말로 하면
+"파일 디스크립터 recv_sock이 가리키는 소켓에 의해 발생하는 SIGURG 시그널을 처리하는 프로세스를 getpid함수가 반환하는 ID의 프로세스로 변경시키겠다."
+
+왜 이 코드가 필요하냐면, 
+하나의 소켓에 대한 파일 디스크립터를 여러 프로세스가 함께 소유할 수 있기 때문이다.
+따라서 SIGURG 시그널을 핸들링 할 때에는 반드시 시그널을 처리할 프로세스를 지정해줘야 한다. 
+
+사실 MSG_OOB에서의 OOB는 Out-of-band를 의미한다. 이는 "전혀 다른 통신 경로로 전송되는 데이터"라는 뜻이다. 
+하지만 TCP는 별도의 통신 경로를 제공하지 않고 있다. 다만 TCP에 존재하는 Urgent mode라는 것을 이용해서 데이터를 전송해줄 뿐이다. 
+
+* 오프셋(Offset)이란.
+"기본이 되는 위치를 바탕으로 상대적 위치를 표현하는 것."
+
+13-2 readv & writev 입출력 함수
+readv & writev 함수의 사용
+"데이터를 모아서 전송하고, 모아서 수신하는 기능의 함수"
+
+때문에 적절한 상황에서 사용을 하면 입출력 함수호출의 수를 줄일 수 있다.
+
+#include <sys/uio.h>
+
+ssize_t writev(int fieldes, const struct iovec * iov, int iovcnt);
+	-> 성공 시 전송된 바이트 수, 실패 시 -1 반환
+
+	- filedes : 데이터 전송의 목적지를 나타내는 소켓의 파일 디스크립터 전달, 단 소켓에만 제한된 함수가 아니기 때문에,
+				read 함수처럼 파일이나 콘솔 대상의 파일 디스크립터도 전달 가능하다.
+	- iov : 구조체 iovec 배열의 주소 값 전달, 구조체 iovec의 변수에는 전송할 데이터의 위치 및 크기 정보가 담긴다.
+	- iovcnt : 두 번째 인자로 전달된 주소 값이 가리키는 배열의 길이정보 전달. 
+
+iov의 형 구조체 iovec는 아래와 같이 정의되어 있다.
+struct iovec
+{
+	void * iov_base;		// 버퍼의 주소 정보
+	size_t iov_len;			// 버퍼의 크기 정보
+}
+
+#include <sys/uio.h>
+
+ssize_t readv(int filedes, const struct iovec * iov, int iovcnt);
+	-> 성공 시 수신된 바이트 수, 실패 시 -1 반환
+
+	- filedes : 데이터를 수신할 파일(혹은 소켓)의 파일 디스크립터를 인자로 전달.
+	- iov : 데이터를 저장할 위치와 크기 정보를 담고 있는 iovec 구조체 배열의 주소 값 전달. 
+	- iovcnt : 두 번째 인자로 전달된 주소 값이 가리키는 배열의 길이 정보 전달. 
+        
+===================================================================================
+while(total_count < sizeof(DBIF_REQ))
+{
+	again:
+	if((count = read(conn_fd, ((void *) &reqData) + total_count, sizeof(DBIF_REQ) - total_count)) < 0)
+	{
+		if(errno == EINTR)
+			goto again;
+
+		Trace("read() : error");
+		return -1;
+	}
+	else if(count == 0)
+	{
+		Trace("read() : closed");
+		return 0;
+	}
+	total_count += count;
+}
+
+
+again:
+if((count = recv(conn_fd, ((void *) &reqData), sizeof(DBIF_REQ), MSG_WAITALL)) < 0)
+{
+	if(errno == EINTR)
+		goto again;
+
+	Trace("read() : error");
+	return -1;
+}
+else if(count == 0)
+{
+	Trace("read() : closed");
+	return 0;
+}     
+===================================================================================
+
+===================================================================================
     
+===================================================================================
+
+===================================================================================
+    
+===================================================================================
+
+===================================================================================
+    
+===================================================================================
+
+===================================================================================
+    
+===================================================================================
+
+===================================================================================    
