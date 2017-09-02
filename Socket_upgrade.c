@@ -1,6 +1,11 @@
 <select함수로 입출력 다중화>
 
 - reference : https://www.joinc.co.kr/w/Site/system_programing/File/select
+- Multi process vs Multi plexing
+ 1) Multi process
+   : big data and small client
+ 2) Multi plexing
+   : small data and many client
 
 입출력 다중화는 여러 개의 파일에서 발생하는 입출력을 함께 관리하는 기술이다. 원리는 간단하다. 
 입출력을 관리하고자 하는 파일의 그룹을 fd_set이라는 파일 비트 배열에 집어 넣고, 비트 배열의 값이 변했는지를 확인하는 방식이다.
@@ -28,6 +33,15 @@ select 함수는 데이터가 변경된 파일의 개수 즉 fd_set에서 비트
 select의 작동방식에 따른 근본적인 문제인데, 연결 파일의 목록을 별도의 배열에 유지 하는 것으로 어느 정도 문제를 해결할 수 있기는 하다. 
 (완전한 방법은 아니다. 연결된 파일이 하나고 이 파일의 지정 번호가 1000이라면, 1번만 비교할 수 있지만, 
 연결된 파일이 1000이라면 여전히 1000번의 루프를 돌아야 할 수 있다.)
+    
+FD_ZERO는 fdset에 있는 모든 값을 0으로 초기화합니다. 변수를 선언하면 초기화하는 것은 당연합니다. 처음 fd_set를 선언후 반드시 호출해야 합니다.
+FD_CLR는 fdset의 값에서 fd에 해당 하는 비트(0부터 시작하기에 실제는 fd-1비트)를 0으로 클리어합니다.
+FD_SET는 fdset의 값에서 fd에 해당 하는 비트(0부터 시작하기에 실제는 fd-1비트)를 1으로 설정합니다.
+FD_ISSET는 fdset의 값에서 fd에 해당 하는 비트(0부터 시작하기에 실제는 fd-1비트)가 1로 설정되었는지 확인합니다. 
+    즉, 1로 설정되었다면 1를 반환, 0으로 설정되었다면 0으로 반환합니다.
+
+
+출처: http://ospace.tistory.com/147 [JaPa2]
 
 * example #1
 이 예제 프로그램은 /tmp/testfile 과 /tmp/testfile2 두개의 파일을 읽어서 파일에 내용이 추가될 때마다 화면에 뿌려주는 일을 한다.
@@ -157,6 +171,64 @@ int main()
 그 10초 안에 fd 에 어떠한 입력이 발생하지 않는다면 select 는 시간이 0 을 넘겨주고, 여기에 대해 적절한 조치를 취해주기만 하면 된다. 
 이것은 간단한 예제로 alarm(2)을 통해서 구현할수도 있을것이다.
 ========================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/time.h>
+
+#define BUFSIZE 30
+
+int main(int argc, char *argv[])
+{
+    fd_set reads, temps;
+    int result;
+
+    char message[BUFSIZE];
+    int str_len;
+    struct timeval timeout;
+
+    FD_ZERO(&reads);    // 0으로 초기화
+    FD_SET(0, &reads);  // 파일디스크립터 0(stdin) 설정
+
+    while(1)
+    {
+        temps = reads;  // backup
+
+        timeout.tv_sec = 10;
+        timeout.tv_usec = 0;
+
+        result = select(1, &temps, 0, 0, &timeout);
+        if( result == -1 ) {
+            puts("select() : error");
+            exit(1);
+        }
+        else if( result == 0 ) {
+            puts( "select() : time out" );
+        }
+        else {
+            if( FD_ISSET( 0, &temps )) {
+                str_len = read(0, message, BUFSIZE);
+                message[str_len] = '\0';
+                //fputs(message, stdout);
+                printf("message : %s\n", message);
+            }
+        }
+    }
+
+    return 0;
+}
+
+* output
+$ ./select_exam.exe
+good
+message : good
+
+select() : time out
+select() : time out
+select() : time out
+select() : time out
+
 
 ========================================================================================================================
 
