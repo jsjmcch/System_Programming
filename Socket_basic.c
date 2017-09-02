@@ -382,6 +382,151 @@ else if(count == 0)
 	return 0;
 }     
 ===================================================================================
+<tcpEchoServer.c>
+/*
+ * tcpEchoServer.c
+ *
+ *  Created on: 2017. 4. 19.
+ *      Author: 72359
+ */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+
+#define MAXLINE 4096
+#define SERV_PORT 3000
+#define LISTENQ 8
+
+int main(int argc, char **argv) {
+	int listenfd, connfd, n;
+	socklen_t clilen;
+
+	char buf[MAXLINE];
+	struct sockaddr_in cliaddr, servaddr;
+
+	// creation of the socket
+	listenfd = socket (AF_INET, SOCK_STREAM, 0);	// 스트림 소켓 생성
+
+	// preparation of the socket address
+	servaddr.sin_family = AF_INET;	// IPv4 인터넷 프로토콜
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);	// Big Endian으로 변환 (Long)
+	servaddr.sin_port = htons(SERV_PORT);	// Big Endian으로 변환 (Short)
+
+	// 생성한 소켓을 서버 소켓으로 등록
+	bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+
+	// 서버 소켓을 통해 클라이언트의 접속 요청을 확인하도록 설정
+	listen(listenfd, LISTENQ);
+
+	printf("%s\n", "Server running... waiting for connections.");
+
+	for ( ; ; ) {
+		clilen = sizeof(cliaddr);
+		// 클라이언트 접속 요청 대기 및 허락, 클라이언트와 통신을 위해 새 socket을 생성
+		// connfd : 클라이언트 접속 시 커널이 생성한 소켓
+		connfd = accept(listenfd, (struct sockaddr *) &cliaddr, &clilen);
+		printf("%s\n", "Received request...");
+
+		while ((n = recv(connfd, buf, MAXLINE, 0)) > 0) {
+			printf("%s", "String received from and resent to the client:");
+			puts(buf);
+			send(connfd, buf, n, 0);
+		}
+
+		if (n < 0) {
+			perror("Read Error");
+			exit(1);
+		}
+
+		close(connfd);
+	}
+
+	close(listenfd);
+}
+
+<tcpEchoClient.c>
+/*
+ * tcpEchoClient.c
+ *
+ *  Created on: 2017. 4. 19.
+ *      Author: 72359
+ */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+
+#define MAXLINE 4096 /*max text line length*/
+#define SERV_PORT 3000 /*port*/
+
+/*
+ * constructor 함수 : main 이전에 실행됨, GCC only
+ *
+ * eclipse에서 cygwin gdb 디버깅할 경우 gdb를 통한 프로그램의 콘솔 출력 버퍼가 정상동작 하지 않고 실행 종료 후 한꺼번에 출력됨.
+ * 이를 피하기 위해 stdout, stderr의 buffering을 끄는 함수.
+ * 만일 buffer가 꼭 필요하다면 아래 함수를 주석처리 할 것.
+ */
+void __attribute__((constructor)) console_setting_for_eclipse_debugging( void ){
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+	setvbuf(stdin, NULL, _IONBF, 0);
+}
+
+int main(int argc, char **argv)
+{
+	int sockfd;
+	struct sockaddr_in servaddr;
+	char sendline[MAXLINE], recvline[MAXLINE];
+
+	//basic check of the arguments
+	//additional checks can be inserted
+	if (argc !=2) {
+		perror("Usage: TCPClient <IP address of the server");
+		exit(1);
+	}
+
+	//Create a socket for the client
+	//If sockfd<0 there was an error in the creation of the socket
+	if ((sockfd = socket (AF_INET, SOCK_STREAM, 0)) <0) {
+		perror("Problem in creating the socket");
+		exit(2);
+	}
+
+	//Creation of the socket
+	//memset(&servaddr, 0, sizeof(servaddr));
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	//servaddr.sin_addr.s_addr= inet_addr(argv[1]);
+	servaddr.sin_addr.s_addr= htonl(INADDR_ANY);
+	servaddr.sin_port =  htons(SERV_PORT); //convert to big-endian order
+
+	//Connection of the client to the socket
+	if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+		perror("Problem in connecting to the server");
+		exit(3);
+	}
+
+	while (fgets(sendline, MAXLINE, stdin) != NULL) {
+		send(sockfd, sendline, strlen(sendline), 0);
+
+		if (recv(sockfd, recvline, MAXLINE, 0) == 0){
+			//error: server terminated prematurely
+			perror("The server terminated prematurely");
+			exit(4);
+		}
+		printf("%s", "String received from the server: ");
+		fputs(recvline, stdout);
+	}
+
+	exit(0);
+}
 
 ===================================================================================
     
