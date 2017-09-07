@@ -529,7 +529,57 @@ int main(int argc, char **argv)
 }
 
 ===================================================================================
-    
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/time.h>
+
+#define SOCK_READ_TIME_MAX 3
+
+long getTimeGap( struct timeval *st, struct timeval *et)
+{
+    struct timeval rt;
+    long diffT = 0L;
+
+    rt.tv_sec = et->tv_sec - st->tv_sec;
+    rt.tv_usec = et->tv_usec - st->tv_usec;
+
+    if( rt.tv_usec < 0 ) {
+        rt.tv_sec--;
+        rt.tv_usec += 1000000L;
+    }
+
+    diffT = (rt.tv_sec*1000000L) + rt.tv_usec;
+
+    return diffT;
+}
+
+int main() {
+    struct timeval startTime;
+    struct timeval endTime;
+    long diffTime = 0L;
+
+    gettimeofday(&startTime, NULL);
+
+    while(1) {
+        gettimeofday(&endTime, NULL);
+        diffTime = getTimeGap(&startTime, &endTime);
+        if(diffTime > (SOCK_READ_TIME_MAX * 1000000L)) {
+            printf(" read time out \n");
+            printf(" difftime = %ld \n", diffTime);
+            gettimeofday(&startTime, NULL);
+        }
+    }
+
+    return 0;
+}
+* output
+$ ./gettimeofday3.exe
+ read time out
+ difftime = 3000115
+ read time out
+ difftime = 3000115
+ read time out
+ difftime = 3000115    
 ===================================================================================
 
 ===================================================================================
